@@ -2,19 +2,23 @@ package goweb
 
 import (
 	"fmt"
-	"net/http"
 	"html/template"
 )
 
-func RenderPage(w http.ResponseWriter,data interface{}, filenames ...string) {
+type PageModel interface {
+	Prepare(c *Context) interface{}
+}
+
+func RenderPage(c *Context,pageModel PageModel, filenames ...string) {
 	tmpl,err:= template.ParseFiles(filenames...)
 	if err != nil {
-		fmt.Fprintf(w, err.Error())
+		fmt.Fprintf(c.Writer, err.Error())
 		return
 	}
-	err= tmpl.Execute(w, data)
+	pageModel.Prepare(c)
+	err= tmpl.Execute(c.Writer, pageModel)
 	if err != nil {
-		fmt.Fprintf(w, err.Error())
+		fmt.Fprintf(c.Writer, err.Error())
 		return
 	}
 }

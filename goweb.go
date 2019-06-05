@@ -1,6 +1,9 @@
 package goweb
 
-import "net/http"
+import (
+	"net/http"
+	"time"
+)
 
 type Engine struct {
 	RouterGroup
@@ -28,7 +31,8 @@ func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 	if handler != nil {
-		handler(&Context{Request: req, Writer: w})
+		req.ParseForm()
+		handler(&Context{Request: req, Writer: w,CT:time.Now()})
 	} else {
 		http.NotFound(w, req)
 	}
