@@ -6,6 +6,7 @@ import (
 )
 
 type Engine struct {
+	ErrorPageFunc
 	RouterGroup
 	trees []methodTree
 }
@@ -30,10 +31,15 @@ func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			}
 		}
 	}
+	context := &Context{Engine: engine, Request: req, Writer: w, CT: time.Now()}
 	if handler != nil {
 		req.ParseForm()
-		handler(&Context{Request: req, Writer: w,CT:time.Now()})
+		handler(context)
 	} else {
-		http.NotFound(w, req)
+		if engine.ErrorPageFunc == nil {
+			http.NotFound(w, req)
+		} else {
+			context.ShowErrorPage(http.StatusNotFound)
+		}
 	}
 }
