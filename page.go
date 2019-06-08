@@ -18,7 +18,7 @@ func RenderPage(c *Context,pageModel PageModel, filenames ...string) {
 	pageModel.Prepare(c)
 	err= tmpl.Execute(c.Writer, pageModel)
 	if err != nil {
-		fmt.Fprintf(c.Writer, err.Error())
+		c.Engine.Log.Error(err)
 		return
 	}
 }

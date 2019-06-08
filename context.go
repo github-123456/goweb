@@ -10,6 +10,7 @@ type Context struct {
 	Request *http.Request
 	Writer  http.ResponseWriter
 	CT      time.Time
+	Signal chan int
 }
 
 func (c *Context) Success(data interface{}) {
@@ -19,12 +20,12 @@ func (c *Context) Failed(error string) {
 	HandlerResult{Error: error}.Write(c.Writer)
 }
 
-type ErrorPageFunc func(c *Context, status int)
+type ErrorPageFunc func(c *Context, status int,msg string)
 
-func (c *Context) ShowErrorPage(status int) {
+func (c *Context) ShowErrorPage(status int,msg string) {
 	if c.Engine == nil {
 		c.Writer.WriteHeader(status)
 	} else {
-		c.Engine.ErrorPageFunc(c, status)
+		c.Engine.ErrorPageFunc(c, status,msg)
 	}
 }
