@@ -23,7 +23,7 @@ func (c *Context) Failed(error string) {
 type ErrorPageFunc func(c *Context, status int,msg string)
 
 func (c *Context) ShowErrorPage(status int,msg string) {
-	if c.Engine == nil {
+	if c.Engine.ErrorPageFunc == nil {
 		c.Writer.WriteHeader(status)
 	} else {
 		c.Engine.ErrorPageFunc(c, status,msg)
