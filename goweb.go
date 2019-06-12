@@ -34,7 +34,7 @@ func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		time.Sleep(1 * time.Second)
 		timeout <- true
 	}()
-	context := &Context{Engine: engine, Request: req, Writer: w, CT: time.Now(), Signal: make(chan int)}
+	context := &Context{Engine: engine, Request: req, Writer: w, CT: time.Now(), Signal: make(chan int),Data:make(map[string]interface{})}
 	select {
 	case engine.ConcurrenceNumSem <- 1:
 		path := context.Request.URL.Path
@@ -51,10 +51,14 @@ func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			context.Request.ParseForm()
 			safelyHandle(handler, context)
 		} else {
-			if engine.ErrorPageFunc == nil {
-				http.NotFound(context.Writer, context.Request)
+			if context.Request.Method == "GET" {
+				if engine.ErrorPageFunc == nil {
+					http.NotFound(context.Writer, context.Request)
+				} else {
+					context.ShowErrorPage(http.StatusNotFound, "page not found")
+				}
 			} else {
-				context.ShowErrorPage(http.StatusNotFound, "page not found")
+				context.Failed(fmt.Sprintf("%s", "404"))
 			}
 		}
 		<-engine.ConcurrenceNumSem
@@ -64,15 +68,19 @@ func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 }
 
 func safelyHandle(hf HandlerFunc, c *Context) {
-	outlog.Println(fmt.Sprintf("start processing request->ip:%s path：%s", c.Request.RemoteAddr, c.Request.URL.Path))
+	outlog.Println(fmt.Sprintf("start processing request->ip:%s path：%s", c.Request.RemoteAddr, c.Request.RequestURI))
 	defer func() {
 		outlog.Println(fmt.Sprintf("end processing request->ip:%s path：%s", c.Request.RemoteAddr, c.Request.URL.Path))
 		if err := recover(); err != nil {
 			errlog.Println(err)
-			if c.Request.Method=="GET"{
-				c.ShowErrorPage(http.StatusBadGateway, "server error")
+			if c.Request.Method == "GET" {
+				if c.Engine.ErrorPageFunc == nil {
+					http.NotFound(c.Writer, c.Request)
+				} else {
+					c.ShowErrorPage(http.StatusBadGateway, "server error")
+				}
 			} else {
-				c.Failed(fmt.Sprintf("%s",err))
+				c.Failed(fmt.Sprintf("%s", err))
 			}
 
 		}

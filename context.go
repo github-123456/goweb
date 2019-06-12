@@ -11,6 +11,7 @@ type Context struct {
 	Writer  http.ResponseWriter
 	CT      time.Time
 	Signal chan int
+	Data map[string]interface{}
 }
 
 func (c *Context) Success(data interface{}) {
