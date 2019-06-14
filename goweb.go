@@ -1,10 +1,13 @@
 package goweb
 
 import (
+	"compress/gzip"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -34,7 +37,7 @@ func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		time.Sleep(1 * time.Second)
 		timeout <- true
 	}()
-	context := &Context{Engine: engine, Request: req, Writer: w, CT: time.Now(), Signal: make(chan int),Data:make(map[string]interface{})}
+	context := &Context{Engine: engine, Request: req, Writer: w, CT: time.Now(), Signal: make(chan int), Data: make(map[string]interface{})}
 	select {
 	case engine.ConcurrenceNumSem <- 1:
 		path := context.Request.URL.Path
@@ -67,7 +70,24 @@ func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
+type gzipResponseWriter struct {
+	io.Writer
+	http.ResponseWriter
+}
+
+func (g gzipResponseWriter) Write(b []byte) (int, error) {
+	g.ResponseWriter.Header().Set("Content-Type", http.DetectContentType(b))
+	return g.Writer.Write(b)
+}
+
 func safelyHandle(hf HandlerFunc, c *Context) {
+	if strings.Contains(c.Request.Header.Get("Accept-Encoding"), "gzip") {
+		c.Writer.Header().Set("Content-Encoding", "gzip")
+		gz := gzip.NewWriter(c.Writer)
+		defer gz.Close()
+		w := gzipResponseWriter{Writer: gz, ResponseWriter: c.Writer}
+		c.Writer = w
+	}
 	outlog.Println(fmt.Sprintf("start processing request->ip:%s path：%s", c.Request.RemoteAddr, c.Request.RequestURI))
 	defer func() {
 		outlog.Println(fmt.Sprintf("end processing request->ip:%s path：%s", c.Request.RemoteAddr, c.Request.URL.Path))
