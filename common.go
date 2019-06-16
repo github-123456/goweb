@@ -1,8 +1,8 @@
 package goweb
 
 import (
-"encoding/json"
-"net/http"
+	"encoding/json"
+	"net/http"
 )
 
 type HandlerResult struct{
@@ -17,4 +17,8 @@ func (hr HandlerResult)Write(w http.ResponseWriter)  {
 	}
 	w.Header().Add("Content-Type","application/json")
 	w.Write(json)
+}
+
+func SanitizeHtml(html string)string {
+	return bluemondayPolicy.Sanitize(html)
 }
