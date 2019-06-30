@@ -9,5 +9,5 @@ type methodTree struct {
 type node struct {
 	path      string
 	regexp *regexp.Regexp
-	handler HandlerFunc
+	handlers  HandlersChain
 }

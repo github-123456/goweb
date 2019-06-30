@@ -6,12 +6,26 @@ import (
 )
 
 type Context struct {
-	Engine  *Engine
-	Request *http.Request
-	Writer  http.ResponseWriter
-	CT      time.Time
-	Signal chan int
-	Data map[string]interface{}
+	Engine   *Engine
+	Request  *http.Request
+	Writer   http.ResponseWriter
+	CT       time.Time
+	Signal   chan int
+	Data     map[string]interface{}
+	index    int
+	handlers HandlersChain
+}
+
+func (c *Context) Next() {
+	c.index++;
+	for c.index < len(c.handlers) {
+		c.handlers[c.index](c)
+		c.index++
+	}
+}
+
+func (c *Context) Abort() {
+	c.index = 10000000000000;
 }
 
 func (c *Context) Success(data interface{}) {
@@ -21,12 +35,12 @@ func (c *Context) Failed(error string) {
 	HandlerResult{Error: error}.Write(c.Writer)
 }
 
-type ErrorPageFunc func(c *Context, status int,msg string)
+type ErrorPageFunc func(c *Context, status int, msg string)
 
-func (c *Context) ShowErrorPage(status int,msg string) {
+func (c *Context) ShowErrorPage(status int, msg string) {
 	if c.Engine.ErrorPageFunc == nil {
 		c.Writer.WriteHeader(status)
 	} else {
-		c.Engine.ErrorPageFunc(c, status,msg)
+		c.Engine.ErrorPageFunc(c, status, msg)
 	}
 }

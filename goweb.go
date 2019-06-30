@@ -29,7 +29,8 @@ func Default() *Engine {
 	return &engine
 }
 
-type HandlerFunc func(*Context)
+type HandlerFunc func(ctx*Context)
+type HandlersChain []HandlerFunc
 
 func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	timeout := make(chan bool, 1)
@@ -38,21 +39,23 @@ func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		timeout <- true
 	}()
 	context := &Context{Engine: engine, Request: req, Writer: w, CT: time.Now(), Signal: make(chan int), Data: make(map[string]interface{})}
+	context.index = -1
 	select {
 	case engine.ConcurrenceNumSem <- 1:
 		path := context.Request.URL.Path
-		var handler HandlerFunc
+		var handlers HandlersChain
 		for _, v := range engine.trees {
 			if v.root.path == path || v.root.regexp != nil && v.root.regexp.MatchString(path) {
 				if v.method == context.Request.Method {
-					handler = v.root.handler
+					handlers = v.root.handlers
 					break
 				}
 			}
 		}
-		if handler != nil {
+		if handlers != nil {
 			context.Request.ParseForm()
-			safelyHandle(handler, context)
+			context.handlers = handlers
+			safelyHandle(context)
 		} else {
 			if context.Request.Method == "GET" {
 				if engine.ErrorPageFunc == nil {
@@ -82,7 +85,7 @@ func (g gzipResponseWriter) Write(b []byte) (int, error) {
 	return g.Writer.Write(b)
 }
 
-func safelyHandle(hf HandlerFunc, c *Context) {
+func safelyHandle(c *Context) {
 	if strings.Contains(c.Request.Header.Get("Accept-Encoding"), "gzip") {
 		c.Writer.Header().Set("Content-Encoding", "gzip")
 		gz := gzip.NewWriter(c.Writer)
@@ -107,5 +110,5 @@ func safelyHandle(hf HandlerFunc, c *Context) {
 
 		}
 	}()
-	hf(c)
+	c.Next()
 }
