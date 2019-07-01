@@ -29,7 +29,7 @@ func Default() *Engine {
 	return &engine
 }
 
-type HandlerFunc func(ctx*Context)
+type HandlerFunc func(ctx *Context)
 type HandlersChain []HandlerFunc
 
 func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
@@ -86,7 +86,7 @@ func (g gzipResponseWriter) Write(b []byte) (int, error) {
 }
 
 func safelyHandle(c *Context) {
-	if strings.Contains(c.Request.Header.Get("Accept-Encoding"), "gzip") {
+	if strings.Contains(c.Request.Header.Get("Accept-Encoding"), "gzip") && c.Request.Header.Get("Connection") != "Upgrade" {
 		c.Writer.Header().Set("Content-Encoding", "gzip")
 		gz := gzip.NewWriter(c.Writer)
 		defer gz.Close()
