@@ -3,6 +3,7 @@ package goweb
 import (
 	"compress/gzip"
 	"fmt"
+	"html/template"
 	"io"
 	"log"
 	"net/http"
@@ -22,8 +23,7 @@ type Engine struct {
 }
 
 func Default() *Engine {
-	engine := Engine{
-	}
+	engine := Engine{}
 	engine.RouterGroup.engine = &engine
 	engine.ConcurrenceNumSem = make(chan int, 5)
 	return &engine
@@ -97,10 +97,17 @@ func safelyHandle(c *Context) {
 	defer func() {
 		outlog.Println(fmt.Sprintf("end processing request->ip:%s path：%s", c.Request.RemoteAddr, c.Request.URL.Path))
 		if err := recover(); err != nil {
+			var err_desc string
+			switch err.(type) {
+			case string:
+				err_desc = err.(string)
+			case error:
+				err_desc = err.(error).Error()
+			}
 			errlog.Println(err)
 			if c.Request.Method == "GET" {
 				if c.Engine.ErrorPageFunc == nil {
-					http.NotFound(c.Writer, c.Request)
+					c.Writer.Write([]byte(err_desc))
 				} else {
 					c.ShowErrorPage(http.StatusBadGateway, "server error")
 				}
@@ -111,4 +118,18 @@ func safelyHandle(c *Context) {
 		}
 	}()
 	c.Next()
+}
+
+func (ctx *Context) RenderPage(data interface{}, filenames ...string) {
+	tmpl, err := template.ParseFiles(filenames...)
+	if err != nil {
+		fmt.Fprintf(ctx.Writer, "server update is in progress...please wait a moment")
+		errlog.Println(err.Error())
+		return
+	}
+	err = tmpl.Execute(ctx.Writer, data)
+	if err != nil {
+		errlog.Println(err)
+		return
+	}
 }
