@@ -68,7 +68,11 @@ func GetSessionByToken(ctx *goweb.Context) (*session, error) {
 }
 
 func init() {
-	access_token_cookie_name = "access_token_" + keygenerator.NewKey(4, true, true, false)
+	k, err := keygenerator.NewKey(4, false, false, false, true)
+	if err != nil {
+		panic(err)
+	}
+	access_token_cookie_name = "access_token_" + k
 }
 
 func extractIdTokenCliams(tokenString string, jwk_json_url string) map[string]interface{} {
