@@ -5,15 +5,15 @@ import (
 	"fmt"
 	"html/template"
 	"io"
-	"log"
 	"net/http"
-	"os"
 	"strings"
 	"time"
+
+	"github.com/swishcloud/gostudy/logger"
 )
 
-var outlog = log.New(os.Stdout, fmt.Sprintf("INFO [%s] ", "GOWEB"), log.Ldate|log.Ltime|log.Lshortfile)
-var errlog = log.New(os.Stderr, fmt.Sprintf("ERROR [%s] ", "GOWEB"), log.Ldate|log.Ltime|log.Lshortfile)
+var outlog = logger.NewFileLogger("log", "GOWEB INFO")
+var errlog = logger.NewFileLogger("log", "GOWEB ERROR")
 
 type Engine struct {
 	ErrorPageFunc
