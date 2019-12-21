@@ -20,12 +20,14 @@ type Engine struct {
 	RouterGroup
 	trees             []methodTree
 	ConcurrenceNumSem chan int
+	WM                *WidgetManager
 }
 
 func Default() *Engine {
 	engine := Engine{}
 	engine.RouterGroup.engine = &engine
 	engine.ConcurrenceNumSem = make(chan int, 5)
+	engine.WM = NewWidgetManager()
 	return &engine
 }
 
@@ -55,7 +57,7 @@ func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		if handlers != nil {
 			context.Request.ParseForm()
 			context.handlers = handlers
-			safelyHandle(context)
+			safelyHandle(engine, context)
 		} else {
 			if context.Request.Method == "GET" {
 				if engine.ErrorPageFunc == nil {
@@ -64,12 +66,12 @@ func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 					context.ShowErrorPage(http.StatusNotFound, "page not found")
 				}
 			} else {
-				context.Failed(fmt.Sprintf("%s", "404"))
+				context.Failed(fmt.Sprintf("%s", string(http.StatusNotFound)))
 			}
 		}
 		<-engine.ConcurrenceNumSem
 	case <-timeout:
-		context.ShowErrorPage(http.StatusBadGateway, "server overload")
+		context.ShowErrorPage(http.StatusBadRequest, "server overload")
 	}
 }
 
@@ -85,7 +87,8 @@ func (g gzipResponseWriter) Write(b []byte) (int, error) {
 	return g.Writer.Write(b)
 }
 
-func safelyHandle(c *Context) {
+func safelyHandle(engine *Engine, c *Context) {
+	engine.WM.PreProcessHandler(c)
 	if strings.Contains(c.Request.Header.Get("Accept-Encoding"), "gzip") && c.Request.Header.Get("Connection") != "Upgrade" {
 		c.Writer.Header().Set("Content-Encoding", "gzip")
 		gz := gzip.NewWriter(c.Writer)
@@ -95,27 +98,18 @@ func safelyHandle(c *Context) {
 	}
 	outlog.Println(fmt.Sprintf("start processing request->ip:%s path：%s", c.Request.RemoteAddr, c.Request.RequestURI))
 	defer func() {
-		outlog.Println(fmt.Sprintf("end processing request->ip:%s path：%s", c.Request.RemoteAddr, c.Request.URL.Path))
 		if err := recover(); err != nil {
-			var err_desc string
-			switch err.(type) {
-			case string:
-				err_desc = err.(string)
-			case error:
-				err_desc = err.(error).Error()
-			}
+			err_desc := fmt.Sprintf("%s", err)
 			errlog.Println(err)
 			if c.Request.Method == "GET" {
-				if c.Engine.ErrorPageFunc == nil {
-					c.Writer.Write([]byte(err_desc))
-				} else {
-					c.ShowErrorPage(http.StatusBadGateway, "server error")
-				}
+				c.ShowErrorPage(http.StatusInternalServerError, err_desc)
 			} else {
 				c.Failed(fmt.Sprintf("%s", err))
 			}
 
 		}
+		engine.WM.PostProcessHandler(c)
+		outlog.Println(fmt.Sprintf("end processing request->ip:%s path：%s", c.Request.RemoteAddr, c.Request.URL.Path))
 	}()
 	c.Next()
 }
@@ -123,8 +117,8 @@ func safelyHandle(c *Context) {
 func (ctx *Context) RenderPage(data interface{}, filenames ...string) {
 	tmpl, err := template.ParseFiles(filenames...)
 	if err != nil {
-		fmt.Fprintf(ctx.Writer, "server update is in progress...please wait a moment")
-		errlog.Println(err.Error())
+		errlog.Println(err)
+		ctx.Writer.Write([]byte(fmt.Sprintf("%s", err)))
 		return
 	}
 	err = tmpl.Execute(ctx.Writer, data)

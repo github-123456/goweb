@@ -17,7 +17,7 @@ type Context struct {
 }
 
 func (c *Context) Next() {
-	c.index++;
+	c.index++
 	for c.index < len(c.handlers) {
 		c.handlers[c.index](c)
 		c.index++
@@ -25,7 +25,7 @@ func (c *Context) Next() {
 }
 
 func (c *Context) Abort() {
-	c.index = 10000000000000;
+	c.index = 10000000000000
 }
 
 func (c *Context) Success(data interface{}) {
@@ -39,8 +39,9 @@ type ErrorPageFunc func(c *Context, status int, msg string)
 
 func (c *Context) ShowErrorPage(status int, msg string) {
 	if c.Engine.ErrorPageFunc == nil {
-		c.Writer.WriteHeader(status)
+		c.Writer.Write([]byte(msg))
 	} else {
 		c.Engine.ErrorPageFunc(c, status, msg)
 	}
+	c.Writer.WriteHeader(status)
 }
