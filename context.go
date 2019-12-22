@@ -1,6 +1,7 @@
 package goweb
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 )
@@ -44,4 +45,8 @@ func (c *Context) ShowErrorPage(status int, msg string) {
 		c.Engine.ErrorPageFunc(c, status, msg)
 	}
 	c.Writer.WriteHeader(status)
+}
+
+func (c *Context) String() string {
+	return fmt.Sprintf("method:%s path:%s remote_ip:%s", c.Request.Method, c.Request.URL.Path, c.Request.RemoteAddr)
 }

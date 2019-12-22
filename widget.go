@@ -1,12 +1,12 @@
 package goweb
 
 type WidgetManager struct {
-	HandlerWidgets []HandlerWidget
+	HandlerWidget HandlerWidget
 }
 
 func NewWidgetManager() *WidgetManager {
 	var wm = &WidgetManager{}
-	wm.HandlerWidgets = []HandlerWidget{}
+	wm.HandlerWidget = &DefaultHanderWidget{}
 	return wm
 }
 
@@ -14,15 +14,13 @@ type HandlerWidget interface {
 	Pre_Process(ctx *Context)
 	Post_Process(ctx *Context)
 }
-
-func (wm *WidgetManager) PreProcessHandler(ctx *Context) {
-	for _, v := range wm.HandlerWidgets {
-		v.Post_Process(ctx)
-	}
+type DefaultHanderWidget struct {
 }
 
-func (wm *WidgetManager) PostProcessHandler(ctx *Context) {
-	for _, v := range wm.HandlerWidgets {
-		v.Post_Process(ctx)
-	}
+func (w *DefaultHanderWidget) Pre_Process(ctx *Context) {
+	outlog.Println("start processing request ->", ctx)
+}
+
+func (w *DefaultHanderWidget) Post_Process(ctx *Context) {
+	outlog.Println("end processing request ->", ctx)
 }

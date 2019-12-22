@@ -6,14 +6,15 @@ import (
 	"html/template"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/swishcloud/gostudy/logger"
 )
 
-var outlog = logger.NewFileLogger("log", "GOWEB INFO")
-var errlog = logger.NewFileLogger("log", "GOWEB ERROR")
+var outlog = logger.NewLogger(os.Stdout, "GOWEB INFO")
+var errlog = logger.NewLogger(os.Stderr, "GOWEB ERROR")
 
 type Engine struct {
 	ErrorPageFunc
@@ -88,15 +89,7 @@ func (g gzipResponseWriter) Write(b []byte) (int, error) {
 }
 
 func safelyHandle(engine *Engine, c *Context) {
-	engine.WM.PreProcessHandler(c)
-	if strings.Contains(c.Request.Header.Get("Accept-Encoding"), "gzip") && c.Request.Header.Get("Connection") != "Upgrade" {
-		c.Writer.Header().Set("Content-Encoding", "gzip")
-		gz := gzip.NewWriter(c.Writer)
-		defer gz.Close()
-		w := gzipResponseWriter{Writer: gz, ResponseWriter: c.Writer}
-		c.Writer = w
-	}
-	outlog.Println(fmt.Sprintf("start processing request->ip:%s path：%s", c.Request.RemoteAddr, c.Request.RequestURI))
+	engine.WM.HandlerWidget.Pre_Process(c)
 	defer func() {
 		if err := recover(); err != nil {
 			err_desc := fmt.Sprintf("%s", err)
@@ -108,9 +101,15 @@ func safelyHandle(engine *Engine, c *Context) {
 			}
 
 		}
-		engine.WM.PostProcessHandler(c)
-		outlog.Println(fmt.Sprintf("end processing request->ip:%s path：%s", c.Request.RemoteAddr, c.Request.URL.Path))
+		engine.WM.HandlerWidget.Post_Process(c)
 	}()
+	if strings.Contains(c.Request.Header.Get("Accept-Encoding"), "gzip") && c.Request.Header.Get("Connection") != "Upgrade" {
+		c.Writer.Header().Set("Content-Encoding", "gzip")
+		gz := gzip.NewWriter(c.Writer)
+		defer gz.Close()
+		w := gzipResponseWriter{Writer: gz, ResponseWriter: c.Writer}
+		c.Writer = w
+	}
 	c.Next()
 }
 
