@@ -92,6 +92,7 @@ func safelyHandle(engine *Engine, c *Context) {
 	engine.WM.HandlerWidget.Pre_Process(c)
 	defer func() {
 		if err := recover(); err != nil {
+			c.Ok = false
 			err_desc := fmt.Sprintf("%s", err)
 			errlog.Println(err)
 			if c.Request.Method == "GET" {
@@ -100,6 +101,8 @@ func safelyHandle(engine *Engine, c *Context) {
 				c.Failed(fmt.Sprintf("%s", err))
 			}
 
+		} else {
+			c.Ok = true
 		}
 		engine.WM.HandlerWidget.Post_Process(c)
 	}()
