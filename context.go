@@ -31,10 +31,10 @@ func (c *Context) Abort() {
 }
 
 func (c *Context) Success(data interface{}) {
-	HandlerResult{Data: data, StatusCode: http.StatusOK}.Write(c.Writer)
+	HandlerResult{Data: data}.Write(c.Writer)
 }
 func (c *Context) Failed(error string) {
-	HandlerResult{Error: error, StatusCode: http.StatusBadRequest}.Write(c.Writer)
+	HandlerResult{Error: error}.Write(c.Writer)
 }
 
 type ErrorPageFunc func(c *Context, status int, msg string)

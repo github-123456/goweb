@@ -6,9 +6,8 @@ import (
 )
 
 type HandlerResult struct {
-	StatusCode int
-	Error      string      `json:"error"`
-	Data       interface{} `json:"data"`
+	Error string      `json:"error"`
+	Data  interface{} `json:"data"`
 }
 
 func (hr HandlerResult) Write(w http.ResponseWriter) {
@@ -17,7 +16,7 @@ func (hr HandlerResult) Write(w http.ResponseWriter) {
 		panic(err)
 	}
 	w.Header().Add("Content-Type", "application/json")
-	w.WriteHeader(hr.StatusCode)
+	w.WriteHeader(http.StatusOK)
 	w.Write(json)
 }
 

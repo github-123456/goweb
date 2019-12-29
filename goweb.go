@@ -90,6 +90,13 @@ func (g gzipResponseWriter) Write(b []byte) (int, error) {
 
 func safelyHandle(engine *Engine, c *Context) {
 	engine.WM.HandlerWidget.Pre_Process(c)
+	if strings.Contains(c.Request.Header.Get("Accept-Encoding"), "gzip") && c.Request.Header.Get("Connection") != "Upgrade" {
+		c.Writer.Header().Set("Content-Encoding", "gzip")
+		gz := gzip.NewWriter(c.Writer)
+		defer gz.Close()
+		w := gzipResponseWriter{Writer: gz, ResponseWriter: c.Writer}
+		c.Writer = w
+	}
 	defer func() {
 		if err := recover(); err != nil {
 			c.Ok = false
@@ -106,13 +113,6 @@ func safelyHandle(engine *Engine, c *Context) {
 		}
 		engine.WM.HandlerWidget.Post_Process(c)
 	}()
-	if strings.Contains(c.Request.Header.Get("Accept-Encoding"), "gzip") && c.Request.Header.Get("Connection") != "Upgrade" {
-		c.Writer.Header().Set("Content-Encoding", "gzip")
-		gz := gzip.NewWriter(c.Writer)
-		defer gz.Close()
-		w := gzipResponseWriter{Writer: gz, ResponseWriter: c.Writer}
-		c.Writer = w
-	}
 	c.Next()
 }
 
