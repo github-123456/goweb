@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -117,7 +119,24 @@ func safelyHandle(engine *Engine, c *Context) {
 }
 
 func (ctx *Context) RenderPage(data interface{}, filenames ...string) {
-	tmpl, err := template.ParseFiles(filenames...)
+	funcMap := map[string]interface{}{}
+	funcMap["formatTime"] = func(t time.Time, layout string) (string, error) {
+		if layout == "" {
+			layout = "01/02/2006 15:04"
+		}
+		tom := 0
+		c, err := ctx.Request.Cookie("tom")
+		if err == nil {
+			tom, err = strconv.Atoi(c.Value)
+			if err != nil {
+				panic(err)
+			}
+		}
+		t = t.Add(-time.Duration(int64(time.Minute) * int64(tom)))
+		return t.Format(layout), nil
+	}
+	tmpl := template.New(path.Base(filenames[0])).Funcs(funcMap)
+	tmpl, err := tmpl.ParseFiles(filenames...)
 	if err != nil {
 		errlog.Println(err)
 		ctx.Writer.Write([]byte(fmt.Sprintf("%s", err)))
