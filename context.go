@@ -45,6 +45,7 @@ func (c *Context) ShowErrorPage(status int, msg string) {
 	} else {
 		c.Engine.ErrorPageFunc(c, status, msg)
 	}
+	c.Ok = false
 }
 
 func (c *Context) String() string {

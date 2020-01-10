@@ -43,7 +43,7 @@ func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		time.Sleep(1 * time.Second)
 		timeout <- true
 	}()
-	context := &Context{Engine: engine, Request: req, Writer: w, CT: time.Now(), Signal: make(chan int), Data: make(map[string]interface{})}
+	context := &Context{Engine: engine, Request: req, Writer: w, CT: time.Now(), Signal: make(chan int), Ok: true, Data: make(map[string]interface{})}
 	context.index = -1
 	select {
 	case engine.ConcurrenceNumSem <- 1:
@@ -110,8 +110,6 @@ func safelyHandle(engine *Engine, c *Context) {
 				c.Failed(fmt.Sprintf("%s", err))
 			}
 
-		} else {
-			c.Ok = true
 		}
 		engine.WM.HandlerWidget.Post_Process(c)
 	}()
