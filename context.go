@@ -40,6 +40,8 @@ func (c *Context) Failed(error string) {
 type ErrorPageFunc func(c *Context, status int, msg string)
 
 func (c *Context) ShowErrorPage(status int, msg string) {
+	//must write header before write body
+	c.Writer.WriteHeader(status)
 	if c.Engine.ErrorPageFunc == nil {
 		c.Writer.Write([]byte(msg))
 	} else {

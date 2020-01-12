@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
@@ -56,7 +57,17 @@ func HasLoggedIn(ctx *goweb.Context) bool {
 	_, err := GetSessionByToken(ctx)
 	return err == nil
 }
-
+func GetBearerToken(ctx *goweb.Context) (string, error) {
+	authorization := ctx.Request.Header["Authorization"]
+	if len(authorization) == 0 {
+		return "", errors.New("not found bearer token")
+	}
+	if match, _ := regexp.MatchString("bearer: .+", authorization[0]); !match {
+		return "", errors.New("not found bearer token")
+	}
+	token := authorization[0][len("bearer: "):]
+	return token, nil
+}
 func GetSessionByToken(ctx *goweb.Context) (*session, error) {
 	cookie, err := ctx.Request.Cookie(access_token_cookie_name)
 	if err != nil {
