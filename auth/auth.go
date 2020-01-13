@@ -2,6 +2,7 @@ package auth
 
 import (
 	"crypto/rsa"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/lestrrat/go-jwx/jwk"
+	"github.com/swishcloud/gostudy/common"
 	"github.com/swishcloud/gostudy/keygenerator"
 
 	"github.com/swishcloud/goweb"
@@ -57,16 +59,41 @@ func HasLoggedIn(ctx *goweb.Context) bool {
 	_, err := GetSessionByToken(ctx)
 	return err == nil
 }
+func CheckToken(ctx *goweb.Context, introspectTokenURL string) (ok bool, err error) {
+	accessToken, err := GetBearerToken(ctx)
+	if err != nil {
+		session, err := GetSessionByToken(ctx)
+		if err != nil {
+			return false, err
+		}
+		accessToken = session.token.AccessToken
+	}
+	b := common.SendRestApiRequest("GET", accessToken, introspectTokenURL, nil, true)
+	m := map[string]interface{}{}
+	err = json.Unmarshal(b, &m)
+	if err != nil {
+		return false, err
+	}
+	if m["error"] != nil {
+		return false, errors.New(m["error"].(string))
+	}
+	isActive := m["data"].(bool)
+	if !isActive {
+		return false, errors.New("the token is not valid")
+	}
+	return true, nil
+}
 func GetBearerToken(ctx *goweb.Context) (string, error) {
 	authorization := ctx.Request.Header["Authorization"]
 	if len(authorization) == 0 {
 		return "", errors.New("not found bearer token")
 	}
-	if match, _ := regexp.MatchString("bearer: .+", authorization[0]); !match {
+	if match, _ := regexp.MatchString("Bearer .+", authorization[0]); !match {
 		return "", errors.New("not found bearer token")
 	}
-	token := authorization[0][len("bearer: "):]
-	return token, nil
+	token := []rune(authorization[0])
+	token = token[7:]
+	return string(token), nil
 }
 func GetSessionByToken(ctx *goweb.Context) (*session, error) {
 	cookie, err := ctx.Request.Cookie(access_token_cookie_name)

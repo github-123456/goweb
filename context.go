@@ -34,7 +34,7 @@ func (c *Context) Success(data interface{}) {
 	HandlerResult{Data: data}.Write(c.Writer)
 }
 func (c *Context) Failed(error string) {
-	HandlerResult{Error: error}.Write(c.Writer)
+	HandlerResult{Error: &error}.Write(c.Writer)
 }
 
 type ErrorPageFunc func(c *Context, status int, msg string)

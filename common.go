@@ -6,7 +6,7 @@ import (
 )
 
 type HandlerResult struct {
-	Error string      `json:"error"`
+	Error *string     `json:"error"`
 	Data  interface{} `json:"data"`
 }
 
