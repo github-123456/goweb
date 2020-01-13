@@ -40,7 +40,7 @@ func Login(ctx *goweb.Context, token *oauth2.Token, jwk_json_url string) *sessio
 	http.SetCookie(ctx.Writer, &cookie)
 	return &session
 }
-func Logout(ctx *goweb.Context, postLogout func(id_token string)) {
+func Logout(ctx *goweb.Context, introspectTokenURL string, postLogout func(id_token string)) {
 	expire := time.Now().Add(-7 * 24 * time.Hour)
 	newCookie := http.Cookie{
 		Name:    access_token_cookie_name,
@@ -48,26 +48,18 @@ func Logout(ctx *goweb.Context, postLogout func(id_token string)) {
 		Expires: expire,
 	}
 	http.SetCookie(ctx.Writer, &newCookie)
-	s, err := GetSessionByToken(ctx)
+	s, err := GetSessionByToken(ctx, introspectTokenURL)
 	if err != nil {
 		panic(err)
 	}
 	postLogout(s.token.Extra("id_token").(string))
 }
 
-func HasLoggedIn(ctx *goweb.Context) bool {
-	_, err := GetSessionByToken(ctx)
+func HasLoggedIn(ctx *goweb.Context, introspectTokenURL string) bool {
+	_, err := GetSessionByToken(ctx, introspectTokenURL)
 	return err == nil
 }
-func CheckToken(ctx *goweb.Context, introspectTokenURL string) (ok bool, err error) {
-	accessToken, err := GetBearerToken(ctx)
-	if err != nil {
-		session, err := GetSessionByToken(ctx)
-		if err != nil {
-			return false, err
-		}
-		accessToken = session.token.AccessToken
-	}
+func CheckToken(accessToken, introspectTokenURL string) (ok bool, err error) {
 	b := common.SendRestApiRequest("GET", accessToken, introspectTokenURL, nil, true)
 	m := map[string]interface{}{}
 	err = json.Unmarshal(b, &m)
@@ -95,14 +87,25 @@ func GetBearerToken(ctx *goweb.Context) (string, error) {
 	token = token[7:]
 	return string(token), nil
 }
-func GetSessionByToken(ctx *goweb.Context) (*session, error) {
+func removeSessionAt(index int) {
+	sessions = append(sessions[:index], sessions[index+1:]...)
+}
+func GetSessionByToken(ctx *goweb.Context, introspectTokenURL string) (*session, error) {
 	cookie, err := ctx.Request.Cookie(access_token_cookie_name)
 	if err != nil {
 		return nil, err
 	}
 	for i := 0; i < len(sessions); i++ {
-		if sessions[i].token.AccessToken == cookie.Value {
-			return &sessions[i], nil
+		s := sessions[i]
+		if s.token.AccessToken == cookie.Value {
+			ok, err := CheckToken(s.token.AccessToken, introspectTokenURL)
+			if err != nil {
+				removeSessionAt(i)
+				return nil, err
+			}
+			if ok {
+				return &s, nil
+			}
 		}
 	}
 	return nil, errors.New("not found session")
