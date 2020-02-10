@@ -29,6 +29,9 @@ type session struct {
 	Data   map[string]interface{}
 }
 
+func (s *session) GetToken() *oauth2.Token {
+	return s.token
+}
 func Login(ctx *goweb.Context, token *oauth2.Token, jwk_json_url string) *session {
 	//todo:mutex.Lock()
 	//todo:defer mutex.Unlock()
@@ -60,29 +63,30 @@ func HasLoggedIn(ctx *goweb.Context, conf *oauth2.Config, introspectTokenURL str
 	_, err := GetSessionByToken(ctx, conf, introspectTokenURL, skip_tls_verify)
 	return err == nil
 }
-func CheckToken(conf *oauth2.Config, token *oauth2.Token, introspectTokenURL string, skip_tls_verify bool) (ok bool, err error) {
+func CheckToken(conf *oauth2.Config, token *oauth2.Token, introspectTokenURL string, skip_tls_verify bool) (sub string, err error) {
 	rac := common.NewRestApiClient("GET", introspectTokenURL, nil, skip_tls_verify).UseToken(conf, token)
 	resp, err := rac.Do()
 	if err != nil {
-		return false, err
+		return "", err
 	}
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return false, err
+		return "", err
 	}
 	m := map[string]interface{}{}
 	err = json.Unmarshal(b, &m)
 	if err != nil {
-		return false, err
+		return "", err
 	}
 	if m["error"] != nil {
-		return false, errors.New(m["error"].(string))
+		return "", errors.New(m["error"].(string))
 	}
-	isActive := m["data"].(bool)
+	data := m["data"].(map[string]interface{})
+	isActive := data["active"].(bool)
 	if !isActive {
-		return false, errors.New("the token is not valid")
+		return "", errors.New("the token is not valid")
 	}
-	return true, nil
+	return data["sub"].(string), nil
 }
 func GetBearerToken(ctx *goweb.Context) (string, error) {
 	authorization := ctx.Request.Header["Authorization"]
@@ -107,14 +111,12 @@ func GetSessionByToken(ctx *goweb.Context, conf *oauth2.Config, introspectTokenU
 	for i := 0; i < len(sessions); i++ {
 		s := sessions[i]
 		if s.token.AccessToken == cookie.Value {
-			ok, err := CheckToken(conf, s.token, introspectTokenURL, skip_tls_verify)
+			_, err := CheckToken(conf, s.token, introspectTokenURL, skip_tls_verify)
 			if err != nil {
 				removeSessionAt(i)
 				return nil, err
 			}
-			if ok {
-				return &s, nil
-			}
+			return &s, nil
 		}
 	}
 	return nil, errors.New("not found session")

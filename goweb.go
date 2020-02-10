@@ -1,15 +1,13 @@
 package goweb
 
 import (
-	"compress/gzip"
+	"errors"
 	"fmt"
 	"html/template"
-	"io"
 	"net/http"
 	"os"
 	"path"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/swishcloud/gostudy/logger"
@@ -19,7 +17,6 @@ var outlog = logger.NewLogger(os.Stdout, "GOWEB INFO")
 var errlog = logger.NewLogger(os.Stderr, "GOWEB ERROR")
 
 type Engine struct {
-	ErrorPageFunc
 	RouterGroup
 	trees             []methodTree
 	ConcurrenceNumSem chan int
@@ -43,8 +40,24 @@ func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		time.Sleep(1 * time.Second)
 		timeout <- true
 	}()
-	context := &Context{Engine: engine, Request: req, Writer: w, CT: time.Now(), Signal: make(chan int), Ok: true, Data: make(map[string]interface{})}
+	context := &Context{Engine: engine, Request: req, CT: time.Now(), Signal: make(chan int), Ok: true, Data: make(map[string]interface{}), FuncMap: map[string]interface{}{}}
+	context.Writer = &ResponseWriter{ResponseWriter: w, ctx: context}
 	context.index = -1
+	context.FuncMap["formatTime"] = func(t time.Time, layout string) (string, error) {
+		if layout == "" {
+			layout = "01/02/2006 15:04"
+		}
+		tom := 0
+		c, err := context.Request.Cookie("tom")
+		if err == nil {
+			tom, err = strconv.Atoi(c.Value)
+			if err != nil {
+				panic(err)
+			}
+		}
+		t = t.Add(-time.Duration(int64(time.Minute) * int64(tom)))
+		return t.Format(layout), nil
+	}
 	select {
 	case engine.ConcurrenceNumSem <- 1:
 		path := context.Request.URL.Path
@@ -57,83 +70,38 @@ func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 				}
 			}
 		}
-		if handlers != nil {
-			context.Request.ParseForm()
-			context.handlers = handlers
-			safelyHandle(engine, context)
-		} else {
-			if context.Request.Method == "GET" {
-				if engine.ErrorPageFunc == nil {
-					http.NotFound(context.Writer, context.Request)
-				} else {
-					context.ShowErrorPage(http.StatusNotFound, "page not found")
-				}
-			} else {
-				context.Failed(fmt.Sprintf("%s", string(http.StatusNotFound)))
-			}
-		}
+		context.handlers = handlers
+		safelyHandle(engine, context)
 		<-engine.ConcurrenceNumSem
 	case <-timeout:
 		context.ShowErrorPage(http.StatusBadRequest, "server overload")
 	}
 }
-
-type gzipResponseWriter struct {
-	io.Writer
-	http.ResponseWriter
-}
-
-func (g gzipResponseWriter) Write(b []byte) (int, error) {
-	if g.ResponseWriter.Header().Get("Content-Type") == "" {
-		g.ResponseWriter.Header().Set("Content-Type", http.DetectContentType(b))
-	}
-	return g.Writer.Write(b)
-}
-
 func safelyHandle(engine *Engine, c *Context) {
 	engine.WM.HandlerWidget.Pre_Process(c)
-	if strings.Contains(c.Request.Header.Get("Accept-Encoding"), "gzip") && c.Request.Header.Get("Connection") != "Upgrade" {
-		c.Writer.Header().Set("Content-Encoding", "gzip")
-		gz := gzip.NewWriter(c.Writer)
-		defer gz.Close()
-		w := gzipResponseWriter{Writer: gz, ResponseWriter: c.Writer}
-		c.Writer = w
-	}
 	defer func() {
 		if err := recover(); err != nil {
 			c.Ok = false
 			err_desc := fmt.Sprintf("%s", err)
+			c.Err = errors.New(err_desc)
 			errlog.Println(err)
-			if c.Request.Method == "GET" {
-				c.ShowErrorPage(http.StatusInternalServerError, err_desc)
-			} else {
-				c.Failed(fmt.Sprintf("%s", err))
-			}
-
 		}
 		engine.WM.HandlerWidget.Post_Process(c)
+		c.Writer.Close()
 	}()
-	c.Next()
+	if c.handlers == nil {
+		c.Err = errors.New("page not found")
+	} else {
+		err := c.Request.ParseForm()
+		if err != nil {
+			panic(err)
+		}
+		c.Next()
+	}
 }
 
 func (ctx *Context) RenderPage(data interface{}, filenames ...string) {
-	funcMap := map[string]interface{}{}
-	funcMap["formatTime"] = func(t time.Time, layout string) (string, error) {
-		if layout == "" {
-			layout = "01/02/2006 15:04"
-		}
-		tom := 0
-		c, err := ctx.Request.Cookie("tom")
-		if err == nil {
-			tom, err = strconv.Atoi(c.Value)
-			if err != nil {
-				panic(err)
-			}
-		}
-		t = t.Add(-time.Duration(int64(time.Minute) * int64(tom)))
-		return t.Format(layout), nil
-	}
-	tmpl := template.New(path.Base(filenames[0])).Funcs(funcMap)
+	tmpl := template.New(path.Base(filenames[0])).Funcs(ctx.FuncMap)
 	tmpl, err := tmpl.ParseFiles(filenames...)
 	if err != nil {
 		errlog.Println(err)
