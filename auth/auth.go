@@ -2,10 +2,8 @@ package auth
 
 import (
 	"crypto/rsa"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"regexp"
 	"time"
@@ -69,12 +67,7 @@ func CheckToken(conf *oauth2.Config, token *oauth2.Token, introspectTokenURL str
 	if err != nil {
 		return "", err
 	}
-	b, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-	m := map[string]interface{}{}
-	err = json.Unmarshal(b, &m)
+	m := common.ReadAsMap(resp.Body)
 	if err != nil {
 		return "", err
 	}

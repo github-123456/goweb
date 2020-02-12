@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"os"
 	"path"
@@ -81,13 +82,22 @@ func safelyHandle(engine *Engine, c *Context) {
 	engine.WM.HandlerWidget.Pre_Process(c)
 	defer func() {
 		if err := recover(); err != nil {
+			err_desc := fmt.Sprintf("%s", err)
+			_, err := c.Writer.Write([]byte(err_desc))
+			if err != nil {
+				log.Println(err)
+			}
+		}
+		c.Writer.Close()
+	}()
+	defer func() {
+		if err := recover(); err != nil {
 			c.Ok = false
 			err_desc := fmt.Sprintf("%s", err)
 			c.Err = errors.New(err_desc)
 			errlog.Println(err)
 		}
 		engine.WM.HandlerWidget.Post_Process(c)
-		c.Writer.Close()
 	}()
 	if c.handlers == nil {
 		c.Err = errors.New("page not found")
