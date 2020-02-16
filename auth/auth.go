@@ -42,7 +42,7 @@ func Login(ctx *goweb.Context, token *oauth2.Token, jwk_json_url string) *sessio
 	http.SetCookie(ctx.Writer, &cookie)
 	return &session
 }
-func Logout(ctx *goweb.Context, conf *oauth2.Config, introspectTokenURL string, skip_tls_verify bool, postLogout func(id_token string)) {
+func Logout(rac *common.RestApiClient, ctx *goweb.Context, conf *oauth2.Config, introspectTokenURL string, skip_tls_verify bool, postLogout func(id_token string)) {
 	expire := time.Now().Add(-7 * 24 * time.Hour)
 	newCookie := http.Cookie{
 		Name:    access_token_cookie_name,
@@ -50,24 +50,24 @@ func Logout(ctx *goweb.Context, conf *oauth2.Config, introspectTokenURL string, 
 		Expires: expire,
 	}
 	http.SetCookie(ctx.Writer, &newCookie)
-	s, err := GetSessionByToken(ctx, conf, introspectTokenURL, skip_tls_verify)
+	s, err := GetSessionByToken(rac, ctx, conf, introspectTokenURL, skip_tls_verify)
 	if err != nil {
 		panic(err)
 	}
 	postLogout(s.token.Extra("id_token").(string))
 }
 
-func HasLoggedIn(ctx *goweb.Context, conf *oauth2.Config, introspectTokenURL string, skip_tls_verify bool) bool {
-	_, err := GetSessionByToken(ctx, conf, introspectTokenURL, skip_tls_verify)
+func HasLoggedIn(rac *common.RestApiClient, ctx *goweb.Context, conf *oauth2.Config, introspectTokenURL string, skip_tls_verify bool) bool {
+	_, err := GetSessionByToken(rac, ctx, conf, introspectTokenURL, skip_tls_verify)
 	return err == nil
 }
-func CheckToken(conf *oauth2.Config, token *oauth2.Token, introspectTokenURL string, skip_tls_verify bool) (sub string, err error) {
-	rac := common.NewRestApiClient("GET", introspectTokenURL, nil, skip_tls_verify).UseToken(conf, token)
-	resp, err := rac.Do()
+func CheckToken(rac *common.RestApiClient, conf *oauth2.Config, token *oauth2.Token, introspectTokenURL string, skip_tls_verify bool) (sub string, err error) {
+	rar := common.NewRestApiRequest("GET", introspectTokenURL, nil).UseToken(conf, token)
+	resp, err := rac.Do(rar)
 	if err != nil {
 		return "", err
 	}
-	m := common.ReadAsMap(resp.Body)
+	m, err := common.ReadAsMap(resp.Body)
 	if err != nil {
 		return "", err
 	}
@@ -96,7 +96,7 @@ func GetBearerToken(ctx *goweb.Context) (string, error) {
 func removeSessionAt(index int) {
 	sessions = append(sessions[:index], sessions[index+1:]...)
 }
-func GetSessionByToken(ctx *goweb.Context, conf *oauth2.Config, introspectTokenURL string, skip_tls_verify bool) (*session, error) {
+func GetSessionByToken(rac *common.RestApiClient, ctx *goweb.Context, conf *oauth2.Config, introspectTokenURL string, skip_tls_verify bool) (*session, error) {
 	cookie, err := ctx.Request.Cookie(access_token_cookie_name)
 	if err != nil {
 		return nil, err
@@ -104,7 +104,7 @@ func GetSessionByToken(ctx *goweb.Context, conf *oauth2.Config, introspectTokenU
 	for i := 0; i < len(sessions); i++ {
 		s := sessions[i]
 		if s.token.AccessToken == cookie.Value {
-			_, err := CheckToken(conf, s.token, introspectTokenURL, skip_tls_verify)
+			_, err := CheckToken(rac, conf, s.token, introspectTokenURL, skip_tls_verify)
 			if err != nil {
 				removeSessionAt(i)
 				return nil, err
