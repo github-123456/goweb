@@ -43,13 +43,7 @@ func Login(ctx *goweb.Context, token *oauth2.Token, jwk_json_url string) *sessio
 	return &session
 }
 func Logout(rac *common.RestApiClient, ctx *goweb.Context, conf *oauth2.Config, introspectTokenURL string, skip_tls_verify bool, postLogout func(id_token string)) {
-	expire := time.Now().Add(-7 * 24 * time.Hour)
-	newCookie := http.Cookie{
-		Name:    access_token_cookie_name,
-		Value:   "",
-		Expires: expire,
-	}
-	http.SetCookie(ctx.Writer, &newCookie)
+	common.DelCookie(ctx.Writer, access_token_cookie_name)
 	s, err := GetSessionByToken(rac, ctx, conf, introspectTokenURL, skip_tls_verify)
 	if err != nil {
 		panic(err)
