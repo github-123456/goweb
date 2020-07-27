@@ -1,14 +1,17 @@
 package auth
 
 import (
+	"context"
 	"crypto/rsa"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"regexp"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
+	"github.com/google/uuid"
 	"github.com/lestrrat/go-jwx/jwk"
 	"github.com/swishcloud/gostudy/common"
 	"github.com/swishcloud/gostudy/keygenerator"
@@ -22,22 +25,33 @@ var access_token_cookie_name string
 var sessions []session
 
 type session struct {
+	id     string
 	token  *oauth2.Token
 	Claims map[string]interface{}
 	Data   map[string]interface{}
 }
 
-func (s *session) GetToken() *oauth2.Token {
-	return s.token
+func (s *session) getToken(conf *oauth2.Config) (*oauth2.Token, error) {
+	ts := conf.TokenSource(context.Background(), s.token)
+	new_token, err := ts.Token()
+	if err != nil {
+		return nil, err
+	}
+	if new_token.AccessToken != s.token.AccessToken {
+		s.token = new_token
+		log.Println("refreshed a token")
+	}
+	return s.token, nil
 }
 func Login(ctx *goweb.Context, token *oauth2.Token, jwk_json_url string) *session {
 	//todo:mutex.Lock()
 	//todo:defer mutex.Unlock()
 	session := session{}
+	session.id = uuid.New().String()
 	session.token = token
 	session.Claims = extractIdTokenCliams(token.Extra("id_token").(string), jwk_json_url)
 	session.Data = map[string]interface{}{}
-	cookie := http.Cookie{Name: access_token_cookie_name, Value: session.token.AccessToken, Path: "/", Expires: time.Now().Add(7 * 24 * time.Hour)}
+	cookie := http.Cookie{Name: access_token_cookie_name, Value: session.id, Path: "/", Expires: time.Now().Add(7 * 24 * time.Hour)}
 	sessions = append(sessions, session)
 	http.SetCookie(ctx.Writer, &cookie)
 	return &session
@@ -55,8 +69,8 @@ func HasLoggedIn(rac *common.RestApiClient, ctx *goweb.Context, conf *oauth2.Con
 	_, err := GetSessionByToken(rac, ctx, conf, introspectTokenURL, skip_tls_verify)
 	return err == nil
 }
-func CheckToken(rac *common.RestApiClient, conf *oauth2.Config, token *oauth2.Token, introspectTokenURL string, skip_tls_verify bool) (sub string, err error) {
-	rar := common.NewRestApiRequest("GET", introspectTokenURL, nil).UseToken(conf, token)
+func CheckToken(rac *common.RestApiClient, token *oauth2.Token, introspectTokenURL string, skip_tls_verify bool) (sub string, err error) {
+	rar := common.NewRestApiRequest("GET", introspectTokenURL, nil).SetAuthHeader(token)
 	resp, err := rac.Do(rar)
 	if err != nil {
 		return "", err
@@ -97,8 +111,12 @@ func GetSessionByToken(rac *common.RestApiClient, ctx *goweb.Context, conf *oaut
 	}
 	for i := 0; i < len(sessions); i++ {
 		s := sessions[i]
-		if s.token.AccessToken == cookie.Value {
-			_, err := CheckToken(rac, conf, s.token, introspectTokenURL, skip_tls_verify)
+		if s.id == cookie.Value {
+			token, err := s.getToken(conf)
+			if err != nil {
+				return nil, err
+			}
+			_, err = CheckToken(rac, token, introspectTokenURL, skip_tls_verify)
 			if err != nil {
 				removeSessionAt(i)
 				return nil, err
