@@ -69,25 +69,26 @@ func HasLoggedIn(rac *common.RestApiClient, ctx *goweb.Context, conf *oauth2.Con
 	_, err := GetSessionByToken(rac, ctx, conf, introspectTokenURL, skip_tls_verify)
 	return err == nil
 }
-func CheckToken(rac *common.RestApiClient, token *oauth2.Token, introspectTokenURL string, skip_tls_verify bool) (sub string, err error) {
+func CheckToken(rac *common.RestApiClient, token *oauth2.Token, introspectTokenURL string, skip_tls_verify bool) (ok bool, sub string, err error) {
 	rar := common.NewRestApiRequest("GET", introspectTokenURL, nil).SetAuthHeader(token)
 	resp, err := rac.Do(rar)
 	if err != nil {
-		return "", err
+		return false, "", err
 	}
 	m, err := common.ReadAsMap(resp.Body)
 	if err != nil {
-		return "", err
+		return false, "", err
 	}
 	if m["error"] != nil {
-		return "", errors.New(m["error"].(string))
+		return false, "", errors.New(m["error"].(string))
 	}
 	data := m["data"].(map[string]interface{})
 	isActive := data["active"].(bool)
-	if !isActive {
-		return "", errors.New("the token is not valid")
+	sub = ""
+	if isActive {
+		sub = data["sub"].(string)
 	}
-	return data["sub"].(string), nil
+	return isActive, sub, nil
 }
 func GetBearerToken(ctx *goweb.Context) (string, error) {
 	authorization := ctx.Request.Header["Authorization"]
@@ -110,18 +111,21 @@ func GetSessionByToken(rac *common.RestApiClient, ctx *goweb.Context, conf *oaut
 		return nil, err
 	}
 	for i := 0; i < len(sessions); i++ {
-		s := sessions[i]
+		s := &sessions[i]
 		if s.id == cookie.Value {
 			token, err := s.getToken(conf)
 			if err != nil {
 				return nil, err
 			}
-			_, err = CheckToken(rac, token, introspectTokenURL, skip_tls_verify)
+			ok, _, err := CheckToken(rac, token, introspectTokenURL, skip_tls_verify)
 			if err != nil {
-				removeSessionAt(i)
 				return nil, err
 			}
-			return &s, nil
+			if !ok {
+				removeSessionAt(i)
+				return nil, errors.New("the login session has expired.")
+			}
+			return s, nil
 		}
 	}
 	return nil, errors.New("not found session")
