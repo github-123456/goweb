@@ -59,6 +59,26 @@ func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		t = t.Add(-time.Duration(int64(time.Minute) * int64(tom)))
 		return t.Format(layout), nil
 	}
+
+	context.FuncMap["formatTimeString"] = func(t_str string, layout string) (string, error) {
+		if layout == "" {
+			layout = "01/02/2006 15:04"
+		}
+		tom := 0
+		c, err := context.Request.Cookie("tom")
+		if err == nil {
+			tom, err = strconv.Atoi(c.Value)
+			if err != nil {
+				panic(err)
+			}
+		}
+		t, err := time.Parse(time.RFC3339Nano, t_str)
+		if err != nil {
+			panic(err)
+		}
+		t = t.Add(-time.Duration(int64(time.Minute) * int64(tom)))
+		return t.Format(layout), nil
+	}
 	select {
 	case engine.ConcurrenceNumSem <- 1:
 		path := context.Request.URL.Path
