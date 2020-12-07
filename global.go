@@ -9,7 +9,7 @@ func init() {
 	bluemondayPolicy.AllowAttrs("src").OnElements("img")
 	bluemondayPolicy.AllowAttrs("class").OnElements("code", "span")
 	bluemondayPolicy.AllowElements("h1", "h2", "h3", "h4", "h5", "h6")
-	bluemondayPolicy.AllowElements("p", "ol", "li", "br", "pre", "code", "span")
+	bluemondayPolicy.AllowElements("p", "ol", "li", "br", "pre", "code", "span", "del")
 }
 
 var bluemondayPolicy *bluemonday.Policy
