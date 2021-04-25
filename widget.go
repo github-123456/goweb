@@ -18,9 +18,9 @@ type DefaultHanderWidget struct {
 }
 
 func (w *DefaultHanderWidget) Pre_Process(ctx *Context) {
-	outlog.Println("start processing request ->", ctx)
+	ctx.Engine.Logger.Println("start processing request ->", ctx)
 }
 
 func (w *DefaultHanderWidget) Post_Process(ctx *Context) {
-	outlog.Println("end processing request ->", ctx)
+	ctx.Engine.Logger.Println("end processing request ->", ctx)
 }

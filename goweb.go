@@ -14,14 +14,12 @@ import (
 	"github.com/swishcloud/gostudy/logger"
 )
 
-var outlog = logger.NewLogger(os.Stdout, "GOWEB INFO")
-var errlog = logger.NewLogger(os.Stderr, "GOWEB ERROR")
-
 type Engine struct {
 	RouterGroup
 	trees             []methodTree
 	ConcurrenceNumSem chan int
 	WM                *WidgetManager
+	Logger            *log.Logger
 }
 
 func Default() *Engine {
@@ -29,6 +27,7 @@ func Default() *Engine {
 	engine.RouterGroup.engine = &engine
 	engine.ConcurrenceNumSem = make(chan int, 5)
 	engine.WM = NewWidgetManager()
+	engine.Logger = logger.NewLogger(os.Stdout, "GOWEB")
 	return &engine
 }
 
@@ -41,7 +40,7 @@ func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		time.Sleep(1 * time.Second)
 		timeout <- true
 	}()
-	context := &Context{Engine: engine, Request: req, CT: time.Now(), Signal: make(chan int), Ok: true, Data: make(map[string]interface{}), FuncMap: map[string]interface{}{}}
+	context := &Context{Engine: engine, Request: req, CT: time.Now(), Signal: make(chan int), Data: make(map[string]interface{}), FuncMap: map[string]interface{}{}}
 	context.Writer = &ResponseWriter{ResponseWriter: w, ctx: context}
 	context.index = -1
 	context.FuncMap["formatTime"] = func(t time.Time, layout string) (string, error) {
@@ -79,9 +78,10 @@ func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		t = t.Add(-time.Duration(int64(time.Minute) * int64(tom)))
 		return t.Format(layout), nil
 	}
+	path := context.Request.URL.Path
+	engine.Logger.Println("Incoming request:", path, "Remote IP:", context.Request.RemoteAddr)
 	select {
 	case engine.ConcurrenceNumSem <- 1:
-		path := context.Request.URL.Path
 		var handlers HandlersChain
 		for _, v := range engine.trees {
 			if v.root.path == path || v.root.regexp != nil && v.root.regexp.MatchString(path) {
@@ -95,32 +95,36 @@ func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		safelyHandle(engine, context)
 		<-engine.ConcurrenceNumSem
 	case <-timeout:
-		context.ShowErrorPage(http.StatusBadRequest, "server overload")
+		engine.Logger.Println(path, "server overload")
+		_, err := context.Writer.Write([]byte("server overload"))
+		if err != nil {
+			engine.Logger.Println(err)
+		}
 	}
 }
 func safelyHandle(engine *Engine, c *Context) {
-	engine.WM.HandlerWidget.Pre_Process(c)
 	defer func() {
 		if err := recover(); err != nil {
 			err_desc := fmt.Sprintf("%s", err)
 			_, err := c.Writer.Write([]byte(err_desc))
 			if err != nil {
-				log.Println(err)
+				engine.Logger.Println(err)
 			}
 		}
 		c.Writer.Close()
 	}()
 	defer func() {
 		if err := recover(); err != nil {
-			c.Ok = false
 			err_desc := fmt.Sprintf("%s", err)
 			c.Err = errors.New(err_desc)
-			errlog.Println(err)
+			engine.Logger.Println(err)
 		}
 		engine.WM.HandlerWidget.Post_Process(c)
 	}()
+	engine.WM.HandlerWidget.Pre_Process(c)
 	if c.handlers == nil {
 		c.Err = errors.New("page not found")
+		c.Writer.WriteHeader(404)
 	} else {
 		err := c.Request.ParseForm()
 		if err != nil {
@@ -134,13 +138,13 @@ func (ctx *Context) RenderPage(data interface{}, filenames ...string) {
 	tmpl := template.New(path.Base(filenames[0])).Funcs(ctx.FuncMap)
 	tmpl, err := tmpl.ParseFiles(filenames...)
 	if err != nil {
-		errlog.Println(err)
+		ctx.Engine.Logger.Println(err)
 		ctx.Writer.Write([]byte(fmt.Sprintf("%s", err)))
 		return
 	}
 	err = tmpl.Execute(ctx.Writer, data)
 	if err != nil {
-		errlog.Println(err)
+		ctx.Engine.Logger.Println(err)
 		return
 	}
 }

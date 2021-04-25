@@ -16,7 +16,6 @@ type Context struct {
 	Data       map[string]interface{}
 	index      int
 	handlers   HandlersChain
-	Ok         bool
 	StatusCode int
 	FuncMap    map[string]interface{}
 	Err        error
