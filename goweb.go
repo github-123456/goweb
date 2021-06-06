@@ -78,6 +78,22 @@ func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		t = t.Add(-time.Duration(int64(time.Minute) * int64(tom)))
 		return t.Format(layout), nil
 	}
+	context.FuncMap["format_file_size"] = func(sizeStr string) (string, error) {
+		size, err := strconv.ParseFloat(sizeStr, 64)
+		if err != nil {
+			return "", err
+		}
+		if size > 1024*1024*1024 {
+			return strconv.FormatFloat(size/1024/1024/1024, 'f', 2, 64) + " gb", nil
+		} else if size > 1024*1024 {
+			return strconv.FormatFloat(size/1024/1024, 'f', 2, 64) + " mb", nil
+		} else if size > 1024 {
+			return strconv.FormatFloat(size/1024, 'f', 2, 64) + " kb", nil
+		} else {
+			return strconv.FormatFloat(size, 'f', 0, 64) + " bytes", nil
+		}
+	}
+
 	path := context.Request.URL.Path
 	engine.Logger.Println("Incoming request:", path, "Remote IP:", context.Request.RemoteAddr)
 	select {
