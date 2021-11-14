@@ -31,6 +31,13 @@ type session struct {
 	Data   map[string]interface{}
 }
 
+func (s *session) GetAccessToken(conf *oauth2.Config) (string, error) {
+	if token, err := s.getToken((conf)); err != nil {
+		return "", err
+	} else {
+		return token.AccessToken, nil
+	}
+}
 func (s *session) getToken(conf *oauth2.Config) (*oauth2.Token, error) {
 	ts := conf.TokenSource(context.Background(), s.token)
 	new_token, err := ts.Token()
