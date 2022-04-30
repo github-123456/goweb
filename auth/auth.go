@@ -50,7 +50,7 @@ func (s *session) getToken(conf *oauth2.Config) (*oauth2.Token, error) {
 	}
 	return s.token, nil
 }
-func Login(ctx *goweb.Context, token *oauth2.Token, jwk_json_url string) *session {
+func Login(ctx *goweb.Context, token *oauth2.Token, jwk_json_url string, expire_time *time.Time) *session {
 	//todo:mutex.Lock()
 	//todo:defer mutex.Unlock()
 	session := session{}
@@ -58,7 +58,12 @@ func Login(ctx *goweb.Context, token *oauth2.Token, jwk_json_url string) *sessio
 	session.token = token
 	session.Claims = extractIdTokenCliams(token.Extra("id_token").(string), jwk_json_url)
 	session.Data = map[string]interface{}{}
-	cookie := http.Cookie{Name: access_token_cookie_name, Value: session.id, Path: "/", Expires: time.Now().Add(7 * 24 * time.Hour)}
+	var cookie http.Cookie
+	if expire_time == nil {
+		cookie = http.Cookie{Name: access_token_cookie_name, Value: session.id, Path: "/", HttpOnly: true, Secure: true}
+	} else {
+		cookie = http.Cookie{Name: access_token_cookie_name, Value: session.id, Path: "/", HttpOnly: true, Secure: true, Expires: *expire_time}
+	}
 	sessions = append(sessions, session)
 	http.SetCookie(ctx.Writer, &cookie)
 	return &session
