@@ -3,12 +3,14 @@ package auth
 import (
 	"context"
 	"crypto/rsa"
+	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
@@ -24,6 +26,7 @@ import (
 var access_token_cookie_name string
 
 const csrf_state_cookie_name = "crft_state"
+const pkce_cookie_name = "pkce"
 
 var sessions []session
 
@@ -182,7 +185,8 @@ func extractIdTokenCliams(tokenString string, jwk_json_url string) map[string]in
 		return nil
 	}
 }
-func SetStateCookie(ctx *goweb.Context) (state string, err error) {
+func SetStateCookie(ctx *goweb.Context) (state string, pkce_encoded string, err error) {
+	//state
 	state, err = keygenerator.NewKey(20, false, false, false, false)
 	if err != nil {
 		panic(err)
@@ -193,18 +197,42 @@ func SetStateCookie(ctx *goweb.Context) (state string, err error) {
 	if err != nil {
 		panic(err)
 	}
-	return state, err
+	//pcke
+	pkce, err := keygenerator.NewKey(43, false, false, false, true)
+	if err != nil {
+		panic(err)
+	}
+	sha256_hased_pkce := sha256.Sum256([]byte(pkce))
+	encoded_pkce := base64.StdEncoding.EncodeToString(sha256_hased_pkce[:])
+	encoded_pkce = strings.Replace(encoded_pkce, "=", "", -1)
+	encoded_pkce = strings.Replace(encoded_pkce, "+", "-", -1)
+	encoded_pkce = strings.Replace(encoded_pkce, "/", "_", -1)
+	pkce_cookie := http.Cookie{Name: pkce_cookie_name, Value: pkce, Path: "/", Secure: true, HttpOnly: true}
+	http.SetCookie(ctx.Writer, &pkce_cookie)
+	if err != nil {
+		panic(err)
+	}
+	return state, encoded_pkce, err
 }
-func GetAuthorizationCode(ctx *goweb.Context) (code string, err error) {
+func GetAuthorizationCode(ctx *goweb.Context) (code string, pkce string, err error) {
+	//state
 	state := ctx.Request.URL.Query().Get("state")
 	common.DelCookie(ctx.Writer, csrf_state_cookie_name)
 	if cookie, err := ctx.Request.Cookie(csrf_state_cookie_name); err != nil {
-		return "", errors.New("state cookie does not present")
+		return "", "", errors.New("state cookie does not present")
 	} else {
 		if cookie.Value != state {
-			return "", errors.New("csrf verification failed")
+			return "", "", errors.New("csrf verification failed")
 		}
 	}
+	//pkce
+	pkce = ""
+	common.DelCookie(ctx.Writer, pkce_cookie_name)
+	if cookie, err := ctx.Request.Cookie(pkce_cookie_name); err != nil {
+		return "", "", errors.New("pkce cookie does not present")
+	} else {
+		pkce = cookie.Value
+	}
 	code = ctx.Request.URL.Query().Get("code")
-	return code, nil
+	return code, pkce, nil
 }
