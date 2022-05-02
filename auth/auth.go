@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"crypto/rsa"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"log"
@@ -21,6 +22,8 @@ import (
 )
 
 var access_token_cookie_name string
+
+const csrf_state_cookie_name = "crft_state"
 
 var sessions []session
 
@@ -178,4 +181,30 @@ func extractIdTokenCliams(tokenString string, jwk_json_url string) map[string]in
 	} else {
 		return nil
 	}
+}
+func SetStateCookie(ctx *goweb.Context) (state string, err error) {
+	state, err = keygenerator.NewKey(20, false, false, false, false)
+	if err != nil {
+		panic(err)
+	}
+	state = base64.URLEncoding.EncodeToString([]byte(state))
+	cookie := http.Cookie{Name: csrf_state_cookie_name, Value: state, Path: "/", Secure: true, HttpOnly: true}
+	http.SetCookie(ctx.Writer, &cookie)
+	if err != nil {
+		panic(err)
+	}
+	return state, err
+}
+func GetAuthorizationCode(ctx *goweb.Context) (code string, err error) {
+	state := ctx.Request.URL.Query().Get("state")
+	common.DelCookie(ctx.Writer, csrf_state_cookie_name)
+	if cookie, err := ctx.Request.Cookie(csrf_state_cookie_name); err != nil {
+		return "", errors.New("state cookie does not present")
+	} else {
+		if cookie.Value != state {
+			return "", errors.New("csrf verification failed")
+		}
+	}
+	code = ctx.Request.URL.Query().Get("code")
+	return code, nil
 }
