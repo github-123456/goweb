@@ -185,22 +185,22 @@ func extractIdTokenCliams(tokenString string, jwk_json_url string) map[string]in
 		return nil
 	}
 }
-func SetStateCookie(ctx *goweb.Context) (state string, pkce_encoded string, err error) {
+func AuthCodeURL(ctx *goweb.Context, conf *oauth2.Config) (string, error) {
 	//state
-	state, err = keygenerator.NewKey(20, false, false, false, false)
+	state, err := keygenerator.NewKey(20, false, false, false, false)
 	if err != nil {
-		panic(err)
+		return "", err
 	}
 	state = base64.URLEncoding.EncodeToString([]byte(state))
 	cookie := http.Cookie{Name: csrf_state_cookie_name, Value: state, Path: "/", Secure: true, HttpOnly: true}
 	http.SetCookie(ctx.Writer, &cookie)
 	if err != nil {
-		panic(err)
+		return "", err
 	}
 	//pcke
 	pkce, err := keygenerator.NewKey(43, false, false, false, true)
 	if err != nil {
-		panic(err)
+		return "", err
 	}
 	sha256_hased_pkce := sha256.Sum256([]byte(pkce))
 	encoded_pkce := base64.StdEncoding.EncodeToString(sha256_hased_pkce[:])
@@ -210,29 +210,33 @@ func SetStateCookie(ctx *goweb.Context) (state string, pkce_encoded string, err 
 	pkce_cookie := http.Cookie{Name: pkce_cookie_name, Value: pkce, Path: "/", Secure: true, HttpOnly: true}
 	http.SetCookie(ctx.Writer, &pkce_cookie)
 	if err != nil {
-		panic(err)
+		return "", err
 	}
-	return state, encoded_pkce, err
+	return conf.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.SetAuthURLParam("code_challenge", encoded_pkce), oauth2.SetAuthURLParam("code_challenge_method", "S256")), nil
 }
-func GetAuthorizationCode(ctx *goweb.Context) (code string, pkce string, err error) {
+func Exchange(ctx *goweb.Context, conf *oauth2.Config, http_client *http.Client) (*oauth2.Token, error) {
 	//state
 	state := ctx.Request.URL.Query().Get("state")
 	common.DelCookie(ctx.Writer, csrf_state_cookie_name)
 	if cookie, err := ctx.Request.Cookie(csrf_state_cookie_name); err != nil {
-		return "", "", errors.New("state cookie does not present")
+		return nil, errors.New("state cookie does not present")
 	} else {
 		if cookie.Value != state {
-			return "", "", errors.New("csrf verification failed")
+			return nil, errors.New("csrf verification failed")
 		}
 	}
 	//pkce
-	pkce = ""
+	pkce := ""
 	common.DelCookie(ctx.Writer, pkce_cookie_name)
 	if cookie, err := ctx.Request.Cookie(pkce_cookie_name); err != nil {
-		return "", "", errors.New("pkce cookie does not present")
+		return nil, errors.New("pkce cookie does not present")
 	} else {
 		pkce = cookie.Value
 	}
-	code = ctx.Request.URL.Query().Get("code")
-	return code, pkce, nil
+	code := ctx.Request.URL.Query().Get("code")
+	token, err := conf.Exchange(context.WithValue(context.Background(), "", http_client), code, oauth2.SetAuthURLParam("code_verifier", pkce))
+	if err != nil {
+		return nil, err
+	}
+	return token, err
 }
